@@ -521,7 +521,7 @@ let command =
 
 let version = "1.0"
 let build_info =
-  (Unix.stat Sys.argv.(0)).Unix.st_mtime
+  ((Shell.run_first_line_exn "which" ["fix_date"]) |> Unix.stat).Unix.st_mtime
   |> time_of_float
   |> Time.to_sec_string ~zone:(Lazy.force Time.Zone.local)
 
