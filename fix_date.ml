@@ -514,7 +514,7 @@ let command =
       let open Command.Let_syntax in
       let open Command.Param in
       let%map
-            dry_run = flag "-n" ~aliases:["--dry-run"] (optional_with_default false bool) ~doc:" actually do nothing"
+            dry_run   = flag "-n" ~aliases:["--dry-run"] no_arg ~doc:" actually do nothing"
         and start_dir = anon ("start_dir" %: string) in
       fun () -> main dry_run start_dir
     )
