@@ -1,0 +1,11 @@
+(executable
+  (name fix_date)
+  (modules fix_date)
+  (libraries unix str core shell)
+  (preprocess (pps ppx_jane)))
+
+
+(alias
+  (name   compress)
+  (deps   fix_date.exe)
+  (action (run upx fix_date.exe)))
