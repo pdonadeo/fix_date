@@ -1,7 +1,7 @@
 (executable
   (name fix_date)
   (modules fix_date)
-  (libraries unix str core shell)
+  (libraries unix str core shell core_unix.command_unix)
   (preprocess (pps ppx_jane)))
 
 

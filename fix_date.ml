@@ -1,4 +1,5 @@
 open Core
+open Base.Poly
 
 
 let dry_run = ref false
@@ -14,7 +15,7 @@ let with_dispose ~dispose f x =
 
 let rec fold_on_dir_tree f acc start_dir =
   let rec loop_the_dir handle acc =
-    let entry = Unix.readdir_opt handle in
+    let entry = Core_unix.readdir_opt handle in
 
     match entry with
     | None -> acc   (* No more entry *)
@@ -23,14 +24,14 @@ let rec fold_on_dir_tree f acc start_dir =
         then begin
           let file_name = Filename.concat start_dir entry in
           let kind =
-            try Some ((Unix.stat file_name).Unix.st_kind)
-            with Unix.Unix_error _ -> None in
+            try Some ((Core_unix.stat file_name).Core_unix.st_kind)
+            with Core_unix.Unix_error _ -> None in
 
           match kind with
           | Some kind -> begin
               let new_acc = f kind acc file_name in
               match kind with
-              | Unix.S_DIR -> loop_the_dir handle (fold_on_dir_tree f new_acc file_name)
+              | Core_unix.S_DIR -> loop_the_dir handle (fold_on_dir_tree f new_acc file_name)
               | _ -> loop_the_dir handle new_acc
             end
           | None -> loop_the_dir handle acc (* cannot stat, continue *)
@@ -39,7 +40,7 @@ let rec fold_on_dir_tree f acc start_dir =
       end
   in (* loop_the_dir *)
 
-  with_dispose ~dispose:Unix.closedir (fun h -> loop_the_dir h acc) (Unix.opendir start_dir)
+  with_dispose ~dispose:Core_unix.closedir (fun h -> loop_the_dir h acc) (Core_unix.opendir start_dir)
 
 type exif_data_type =
   | Ascii
@@ -134,14 +135,14 @@ let time_of_string s =
       if s.[5] = ' '
       then replace_first (create " ") ~in_:s ~with_:"0"
       else s in
-    try Some (Time.of_string s)
+    try Some (Time_float_unix.of_string s)
     with _ -> None
   end else None
 
 module Image =
 struct
   type t = {
-    date_time : Time.t option;
+    date_time : Time_float_unix.t option;
   }
 
   let empty = { date_time = None }
@@ -167,8 +168,8 @@ end
 module Photo =
 struct
   type t = {
-    date_time_digitized : Time.t option;
-    date_time_original : Time.t option;
+    date_time_digitized : Time_float_unix.t option;
+    date_time_original : Time_float_unix.t option;
   }
 
   let empty = { date_time_digitized = None; date_time_original = None }
@@ -259,6 +260,8 @@ let regexp13 = Str.regexp "^.*/Screenshot from \\(20[0-9][0-9]\\)-\\([0-9][0-9]\
 let regexp14 = Str.regexp "^.*/Screenshot_\\(20[0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)-\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\.\\(jpg\\|png\\)$"
 let regexp15 = Str.regexp "^.*/profile_\\(20[0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)_\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\(_[0-9]\\)?\\.png$"
 let regexp16 = Str.regexp "^.*/photo_\\(20[0-9][0-9]\\)-\\([0-9][0-9]\\)-\\([0-9][0-9]\\)_\\([0-9][0-9]\\)-\\([0-9][0-9]\\)-\\([0-9][0-9]\\)\\.jpg$"
+let regexp17 = Str.regexp "^.*/IMG_\\(20[0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)_\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)_[0-9]+.\\(jpg\\|png\\|mp4\\)"
+let regexp18 = Str.regexp "^.*/VID\\(20[0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\).\\(jpg\\|png\\|mp4\\|3gp\\)"
 
 let cruft1 = Str.regexp "^.*\\.dropbox$"
 let cruft2 = Str.regexp "^.*\\.DS_Store$"
@@ -277,11 +280,11 @@ let ts_of_string s =
   let min = extract_group_or_def 5 s in
   let sec = extract_group_or_def 6 s in
   let ts_string = Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" year month day hour min sec in
-  Time.of_string ts_string
+  Time_float_unix.of_string ts_string
 
-let time_of_float s = Time.(s |> Span.of_sec |> of_span_since_epoch)
+let time_of_float s = Time_float_unix.(s |> Span.of_sec |> of_span_since_epoch)
 
-let time_to_float t = Time.(t |> to_span_since_epoch |> Span.to_sec)
+let time_to_float t = Time_float_unix.(t |> to_span_since_epoch |> Span.to_sec)
 
 let extract_date_from_name fname =
   if Str.string_match regexp1 fname 0
@@ -319,6 +322,10 @@ let extract_date_from_name fname =
   then Some (ts_of_string fname)
   else if Str.string_match regexp16 fname 0
   then Some (ts_of_string fname)
+  else if Str.string_match regexp17 fname 0
+  then Some (ts_of_string fname)
+  else if Str.string_match regexp18 fname 0
+  then Some (ts_of_string fname)
   else if Str.string_match cruft1 fname 0
   then None
   else if Str.string_match cruft2 fname 0
@@ -329,29 +336,29 @@ let datetime_of_exif exif =
   let open Exif in
 
   let decide_dtd_or_dto dtd dto =
-    let diff = Time.diff dtd dto |> Time.Span.to_sec in
+    let diff = Time_float_unix.diff dtd dto |> Time_float_unix.Span.to_sec in
     if Float.abs diff < 5.0
-    then Some (Time.min dtd dto)
+    then Some (Time_float_unix.min dtd dto)
     else Some dto
   in
 
   let decide_3 dt dtd dto =
-    let min_t = Time.min dt dtd |> Time.min dto in
-    let max_t = Time.max dt dtd |> Time.max dto in
-    let diff = Time.diff min_t max_t |> Time.Span.to_sec in
+    let min_t = Time_float_unix.min dt dtd |> Time_float_unix.min dto in
+    let max_t = Time_float_unix.max dt dtd |> Time_float_unix.max dto in
+    let diff = Time_float_unix.diff min_t max_t |> Time_float_unix.Span.to_sec in
     if Float.abs diff < 5.0
     then Some min_t
     else begin
       let mid_t =
-        let open Time in
+        let open Time_float_unix in
         if min_t <= dt  && dt  < max_t then dt else
         if min_t <= dtd && dtd < max_t then dtd else
         if min_t <= dto && dto < max_t then dto else
           failwith "Questo non dovrebbe mai accadere!" in
-      assert Time.(min_t <= mid_t && mid_t < max_t);
-      if (Float.abs (Time.diff min_t mid_t |> Time.Span.to_sec)) < 1.0
+      assert Time_float_unix.(min_t <= mid_t && mid_t < max_t);
+      if (Float.abs (Time_float_unix.diff min_t mid_t |> Time_float_unix.Span.to_sec)) < 1.0
       then Some min_t else
-      if (Float.abs (Time.diff max_t mid_t |> Time.Span.to_sec)) < 1.0
+      if (Float.abs (Time_float_unix.diff max_t mid_t |> Time_float_unix.Span.to_sec)) < 1.0
       then Some mid_t else failwith "TODO: PROMPT THE USER!"
     end
   in
@@ -387,22 +394,22 @@ let datetime_of_exif exif =
     end
 
 let fix_mtime fname mtime =
-  let open Unix in
+  let open Core_unix in
   if !dry_run
   then Printf.printf "FILE MTIME CHANGED TO %s: \"%s\"\n%!"
-      (mtime |> time_of_float |> Time.to_string) fname
+      (mtime |> time_of_float |> Time_float_unix.to_string) fname
   else utimes fname ~access:(stat fname).st_atime ~modif:mtime
 
 let rec user_decide fname exif_dt fn_dt =
-  let file_stat = Unix.stat fname in
-  let mtime = file_stat.Unix.st_mtime in
+  let file_stat = Core_unix.stat fname in
+  let mtime = file_stat.Core_unix.st_mtime in
   let file_dt = time_of_float mtime in
 
   let rec ask_and_read_reply () =
     Printf.printf "\nFILE: \"%s\"\n%!" fname;
-    Printf.printf "  1) Unix mtime    = %s\n%!" (Time.to_string file_dt);
-    Printf.printf "  2) EXIF time     = %s\n%!" (Time.to_string exif_dt);
-    Printf.printf "  3) filename time = %s\n%!" (Time.to_string fn_dt);
+    Printf.printf "  1) Unix mtime    = %s\n%!" (Time_float_unix.to_string file_dt);
+    Printf.printf "  2) EXIF time     = %s\n%!" (Time_float_unix.to_string exif_dt);
+    Printf.printf "  3) filename time = %s\n%!" (Time_float_unix.to_string fn_dt);
     Printf.printf "  4) DO NOTHING\n%!";
     try In_channel.(input_line_exn stdin) |> String.strip |> int_of_string
     with (Failure _) -> ask_and_read_reply () in
@@ -414,7 +421,7 @@ let rec user_decide fname exif_dt fn_dt =
   | _ -> user_decide fname exif_dt fn_dt
 
 let set_exif fname tstamp =
-  let open Time in
+  let open Time_float_unix in
   let ts_str = format tstamp ~zone:(Lazy.force Zone.local) "%Y:%m:%d %H:%M:%S" in
   let tags_to_set = [
     "Exif.Image.DateTime";
@@ -443,29 +450,29 @@ let rename_file fname dt =
   let _file, ext = Filename.split_extension file in
   match ext with
   | Some ext -> begin
-      let file' = Time.format dt ~zone:(Lazy.force Time.Zone.local) "%Y-%m-%d %H.%M.%S" in
+      let file' = Time_float_unix.format dt ~zone:(Lazy.force Time_float_unix.Zone.local) "%Y-%m-%d %H.%M.%S" in
       let fname' = dir^"/"^file'^"."^ext in
       if !dry_run
       then Printf.printf "RENAME FILE \"%s\" -> \"%s\"" fname fname'
-      else Sys.rename fname fname';
+      else Sys_unix.rename fname fname';
       Some fname'
     end
   | None -> None
 
 let action_on_file kind () fname =
   match kind with
-  | Unix.S_REG -> begin(
+  | Core_unix.S_REG -> begin(
       if !dry_run
       then Printf.printf "Considering file \"%s\"\n%!" fname;
       let exif_datetime = extract_exiv2 fname |> datetime_of_exif in
       let filename_datetime = extract_date_from_name fname in
       match exif_datetime, filename_datetime with
       | Some exif_dt, Some fn_dt -> begin
-          if (Float.abs (Time.diff exif_dt fn_dt |> Time.Span.to_sec)) < 15.0
+          if (Float.abs (Time_float_unix.diff exif_dt fn_dt |> Time_float_unix.Span.to_sec)) < 15.0
           then begin
-            let file_stat = Unix.stat fname in
+            let file_stat = Core_unix.stat fname in
             let exif_dt_float = time_to_float exif_dt in
-            if Float.abs (exif_dt_float -. (file_stat.Unix.st_mtime)) > 1.0 then begin
+            if Float.abs (exif_dt_float -. (file_stat.Core_unix.st_mtime)) > 1.0 then begin
               fix_mtime fname exif_dt_float;
             end
           end else begin
@@ -482,16 +489,16 @@ let action_on_file kind () fname =
         end
       | Some ts, None -> begin
           let ts_float = time_to_float ts in
-          let file_stat = Unix.stat fname in
-          if Float.abs (ts_float -. (file_stat.Unix.st_mtime)) > 1.0 then begin
+          let file_stat = Core_unix.stat fname in
+          if Float.abs (ts_float -. (file_stat.Core_unix.st_mtime)) > 1.0 then begin
             fix_mtime fname ts_float;
           end
           (* TODO TODO TODO CHIEDERE ALL'UTENTE SE RINOMINARE IL FILE? *)
         end
       | None, Some ts -> begin
           let ts_float = time_to_float ts in
-          let file_stat = Unix.stat fname in
-          if Float.abs (ts_float -. (file_stat.Unix.st_mtime)) > 1.0 then begin
+          let file_stat = Core_unix.stat fname in
+          if Float.abs (ts_float -. (file_stat.Core_unix.st_mtime)) > 1.0 then begin
             set_exif fname ts;
             fix_mtime fname ts_float
           end
@@ -521,8 +528,8 @@ let command =
 
 let version = "1.0"
 let build_info =
-  ((Shell.run_first_line_exn "which" ["fix_date"]) |> Unix.stat).Unix.st_mtime
+  ((Shell.run_first_line_exn "which" ["fix_date"]) |> Core_unix.stat).Core_unix.st_mtime
   |> time_of_float
-  |> Time.to_sec_string ~zone:(Lazy.force Time.Zone.local)
+  |> Time_float_unix.to_sec_string ~zone:(Lazy.force Time_float_unix.Zone.local)
 
-let () = Command.run ~version ~build_info command
+let () = Command_unix.run ~version ~build_info command
